@@ -185,7 +185,7 @@ class Crypt4ghFS(pyfuse3.Operations, metaclass=NotPermittedMetaclass):
             raise FUSEError(exc.errno)
         except Exception as exc:
             LOG.error('Error opening %s: %s', path, exc)
-            raise FUSEError(errno.ENOENT)
+            raise FUSEError(errno.EACCES)
         return pyfuse3.FileInfo(fh=fd)
 
     async def read(self, fd, offset, length):
