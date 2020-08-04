@@ -72,18 +72,18 @@ class Crypt4ghFS(pyfuse3.Operations, metaclass=NotPermittedMetaclass):
             raise FUSEError(errno.ENOENT)
         return path
 
-    async def forget(self, inode_list):
-        for (inode, nlookup) in inode_list:
-            if self._lookup_cnt[inode] > nlookup:
-                self._lookup_cnt[inode] -= nlookup
-                continue
-            LOG.debug('forgetting about inode %d', inode)
-            assert inode not in self._inode2fd
-            del self._lookup_cnt[inode]
-            try:
-                del self._inode_path_map[inode]
-            except KeyError: # may have been deleted
-                pass
+    # async def forget(self, inode_list):
+    #     for (inode, nlookup) in inode_list:
+    #         if self._lookup_cnt[inode] > nlookup:
+    #             self._lookup_cnt[inode] -= nlookup
+    #             continue
+    #         LOG.debug('forgetting about inode %d', inode)
+    #         assert inode not in self._inode2fd
+    #         del self._lookup_cnt[inode]
+    #         try:
+    #             del self._inode_path_map[inode]
+    #         except KeyError: # may have been deleted
+    #             pass
 
     async def lookup(self, inode_p, name, ctx=None):
         name = fsdecode(name)
@@ -177,24 +177,29 @@ class Crypt4ghFS(pyfuse3.Operations, metaclass=NotPermittedMetaclass):
 
         try:
             path = self._inode_to_path(inode)
-            fd = os.open(path, flags) # new file descriptor each time we open
-            self._fd2decryptors[fd] = FileDecryptor(fd, self.keys)
+            dec = FileDecryptor(path, flags, self.keys)
+            fd = dec.fd()
+            self._fd2decryptors[fd] = dec
         except OSError as exc:
+            LOG.error('OSError opening %s: %s', path, exc)
             raise FUSEError(exc.errno)
         except Exception as exc:
+            LOG.error('Error opening %s: %s', path, exc)
             raise FUSEError(errno.ENOENT)
         return pyfuse3.FileInfo(fh=fd)
 
     async def read(self, fd, offset, length):
         dec = self._fd2decryptors[fd]
-        return dec.read(offset, length)
+        return b''.join(data for data in dec.read(offset, length)) # inefficient
 
-    async def release(self, fd):
+    async def flush(self, fd):
         try:
-            del self._file_decryptors[fd]
+            del self._fd2decryptors[fd]
+        except KeyError as exc:
+            LOG.error('Already closed: %s', exc)
         except Exception as exc:
-            raise FUSEError(exc.errno)
-
+            LOG.error('Error closing %d: %s', fd, exc)
+            raise FUSEError(errno.EBADF)
 
     async def statfs(self, ctx):
         s = pyfuse3.StatvfsData()

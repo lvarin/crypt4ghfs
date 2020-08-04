@@ -11,42 +11,55 @@ LOG = logging.getLogger(__name__)
 
 class FileDecryptor():
 
-    def __init__(self, fd, keys):
+    __slots__ = ('f',
+                 'session_keys',
+                 'edit_list',
+                 'hlen',
+                 'pos',
+                 'ciphersegment',
+                 'segment')
+
+    def __init__(self, path, flags, keys):
         # Parse header (yes, for each fd, small cost for caching segment)
-        self.f = os.fdopen(fd)
-        self.f.seek(0, io.SEEK_SET)  # rewind, just to be sure
+        def opener(p,fl):
+            LOG.info('Opening %s',p)
+            return os.open(p,fl)
+        self.f = open(path,
+                      mode='rb',
+                      buffering=0, # off
+                      opener=opener) # new file descriptor each time we open
+        # self.f.seek(0, io.SEEK_SET)  # rewind, just to be sure
         self.session_keys, self.edit_list = crypt4gh.header.deconstruct(self.f, keys, sender_pubkey=None)
         self.hlen = self.f.tell()
+        LOG.info('Payload position: %d', self.hlen)
 
         # First version: we do not support edit lists
         if self.edit_list:
             raise ValueError('Edit list are not supported for this version')
 
         # Crypt4GH decryption buffer
-        self.pos = 0
+        self.pos = None
         self.ciphersegment = None # TODO: use the same buffer instead of reallocating bytes
         self.segment = None
 
-    def seek(self, start, end):
-        pass
-
-    def decrypt(self, n):
-
-        crypt4gh.lib.CIPHER_SEGMENT_SIZE
-        crypt4gh.lib.decrypt_block(ciphersegment, self.session_keys)
+    def fd(self):
+        return self.f.fileno()
 
     def __del__(self):
-        del self.ciphersegment
-        del self.segment
+        LOG.debug('Deleting the FileDecryptor')
+        # self.ciphersegment = None
+        # self.segment = None
+        # self.pos = None
         self.f.close()
 
     def read(self, offset, length):
+        LOG.debug('Read offset: %s, length: %s', offset, length)
         assert length > 0, "You can't read just 0 bytes"
         while length > 0:
             # Find which segment we are reaching into
             start_segment, off = divmod(offset, SEGMENT_SIZE)
             # Move to its start
-            LOG.debug('Fast-forwarding %d segments', start_segment)
+            LOG.debug('Current position: %s | Fast-forwarding %d segments', self.pos, start_segment)
             start_ciphersegment = start_segment * CIPHER_SEGMENT_SIZE
             if self.pos != start_ciphersegment:
                 LOG.debug('We do not have that segment cached')
