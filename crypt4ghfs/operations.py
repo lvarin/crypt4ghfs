@@ -87,7 +87,7 @@ class Crypt4ghFS(pyfuse3.Operations, metaclass=NotPermittedMetaclass):
 
     async def lookup(self, inode_p, name, ctx=None):
         name = fsdecode(name)
-        LOG.debug('lookup for %s in %d', name, inode_p)
+        LOG.info('lookup for %s in %d', name, inode_p)
         path = os.path.join(self._inode_to_path(inode_p), name)
         return self._getattr(path=path)
 
@@ -119,7 +119,7 @@ class Crypt4ghFS(pyfuse3.Operations, metaclass=NotPermittedMetaclass):
     async def opendir(self, inode, ctx):
 
         path = self._inode_to_path(inode)
-        LOG.debug('opening %s', path)
+        LOG.info('opening %s', path)
         mtime = self._inode2mtime.get(inode)
         entry = self._getattr(path)
 
@@ -140,11 +140,12 @@ class Crypt4ghFS(pyfuse3.Operations, metaclass=NotPermittedMetaclass):
         return inode
 
     async def readdir(self, inode, off, token):
-        LOG.debug('readdir %s [offset: %s]', inode, off)
         if not off:
             off = -1
 
         path = self._inode_to_path(inode)
+        LOG.info('readdir %s [inode %s]', path, inode)
+        LOG.debug('\toffset %s', off)
         entries = self._inode2entries[inode]
         LOG.debug('read %d entries, starting at %d', len(entries), off)
 
@@ -193,6 +194,7 @@ class Crypt4ghFS(pyfuse3.Operations, metaclass=NotPermittedMetaclass):
         return b''.join(data for data in dec.read(offset, length)) # inefficient
 
     async def flush(self, fd):
+        LOG.info('flush fd %s', fd)
         try:
             del self._fd2decryptors[fd]
         except KeyError as exc:
@@ -202,6 +204,7 @@ class Crypt4ghFS(pyfuse3.Operations, metaclass=NotPermittedMetaclass):
             raise FUSEError(errno.EBADF)
 
     async def statfs(self, ctx):
+        LOG.info('Getting statfs')
         s = pyfuse3.StatvfsData()
         try:
             statfs = os.statvfs(self.rootdir)

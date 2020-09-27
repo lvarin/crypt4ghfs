@@ -8,13 +8,14 @@ from logging.config import dictConfig
 import argparse
 from functools import partial
 from getpass import getpass
-
+from pathlib import Path
 
 import pyfuse3
 import trio
 from crypt4gh.keys import get_private_key
 
 from .operations import Crypt4ghFS
+from .daemonize import Daemon
 
 try:
     import faulthandler
@@ -41,11 +42,14 @@ def load_logger(level):
                 'handlers': { 'noHandler': { 'class': 'logging.NullHandler',
                                              'level': 'NOTSET' },
                               'console': { 'class': 'logging.StreamHandler',
-                                           'formatter': 'simple',
+                                           'formatter': 'simple' if level == 'DEBUG' else 'short',
                                            'stream': 'ext://sys.stderr'}
                 },
-                'formatters': {'simple': {'format': '[{name:^10}][{levelname:^6}] (L{lineno}) {message}',
-                                          'style': '{'},
+                'formatters': {
+                    'simple': {'format': '[{name:^10}][{levelname:^6}] (L{lineno}) {message}',
+                               'style': '{' },
+                    'short': {'format': '[{levelname:^6}] {message}',
+                              'style': '{' },
                 }
     })
 
@@ -68,7 +72,9 @@ def retrieve_secret_key(seckey):
 def parse_options():
     parser = argparse.ArgumentParser(description='Crypt4GH filesystem')
     parser.add_argument('mountpoint', help='mountpoint for the Crypt4GH filesystem')
-    parser.add_argument('-o', help='mount options', default='ro,allow_root,default_permissions,seckey=~/.c4gh/sec.key')
+    parser.add_argument('-o', metavar='options',
+                        help='comma-separated list of mount options',
+                        default='ro,allow_root,default_permissions,seckey=~/.c4gh/sec.key')
 
     args = parser.parse_args()
 
@@ -80,6 +86,7 @@ def parse_options():
     options = args.o.split(',')
     fuse_options = []
     seckey = None
+    foreground = False
     for option in options:
         LOG.debug('Inspecting option: %s', option)
         if option == 'debug_fuse':
@@ -92,9 +99,13 @@ def parse_options():
             except:
                 pass
         elif option.startswith('rootdir='):
-            rootdir = option[8:]
+            rootdir = os.path.expanduser(option[8:])
+            if not os.path.exists(rootdir):
+                raise ValueError(f'Root directory "{rootdir}" does not exist')
         elif option.startswith('seckey='):
             seckeypath = option[7:]
+        elif option == 'foreground':
+            foreground = True
         else:
             fuse_options.append(option)
 
@@ -103,20 +114,11 @@ def parse_options():
         raise ValueError('Missing secret key')
     seckey = retrieve_secret_key(seckeypath)
 
-    return args.mountpoint, rootdir, seckey, fuse_options
+    return args.mountpoint, rootdir, seckey, fuse_options, foreground
 
 
-def _main():
+def _main(mountpoint, rootdir, seckey, options):
 
-    mountpoint, rootdir, seckey, options = parse_options()
-
-    LOG.debug('Mountpoint: %s | Root dir: %s', mountpoint, rootdir)
-    LOG.debug('mount options: %s', options)
-
-    if not os.path.exists(rootdir):
-        return 1
-
-    # ....aaand cue music!
     fs = Crypt4ghFS(rootdir, seckey)
     pyfuse3.init(fs, mountpoint, options)
 
@@ -139,9 +141,27 @@ def _main():
     # umount <the-mountpoint>
     return 0
 
+class Crypt4GHDaemon(Daemon):
+    def __init__(self, *args):
+        self.args = args
+        curdir = os.getcwd() # pidfile in the current directory
+        super().__init__(os.path.join(curdir, 'crypt4ghfs.pid'))
+
+    def run(self):
+        sys.exit(_main(*self.args))
 
 def main():
-    sys.exit(_main())
+    mountpoint, rootdir, seckey, options, foreground = parse_options()
+
+    LOG.debug('Mountpoint: %s | Root dir: %s', mountpoint, rootdir)
+    LOG.debug('mount options: %s', options)
+
+    # ....aaand cue music!
+    if foreground:
+        sys.exit(_main(mountpoint, rootdir, seckey, options))
+        
+    # daemonize
+    Crypt4GHDaemon(mountpoint, rootdir, seckey, options).start()
 
 if __name__ == '__main__':
     main()
