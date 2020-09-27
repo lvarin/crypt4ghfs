@@ -145,6 +145,8 @@ def detach(umask=0):
 
     https://www.python.org/dev/peps/pep-3143/#correct-daemon-behaviour
     https://daemonize.readthedocs.io/en/latest/_modules/daemonize.html#Daemonize
+    and
+    https://dpbl.wordpress.com/2017/02/12/a-tutorial-on-python-daemon/
     '''
     try:
         LOG.info('Forking current process, and exiting the parent')
