@@ -15,7 +15,6 @@ import trio
 from crypt4gh.keys import get_private_key
 
 from .operations import Crypt4ghFS
-from .daemonize import Daemon
 
 try:
     import faulthandler
@@ -141,14 +140,38 @@ def _main(mountpoint, rootdir, seckey, options):
     # umount <the-mountpoint>
     return 0
 
-class Crypt4GHDaemon(Daemon):
-    def __init__(self, *args):
-        self.args = args
-        curdir = os.getcwd() # pidfile in the current directory
-        super().__init__(os.path.join(curdir, 'crypt4ghfs.pid'))
+def detach(umask=0):
+    '''PEP 3143
 
-    def run(self):
-        sys.exit(_main(*self.args))
+    https://www.python.org/dev/peps/pep-3143/#correct-daemon-behaviour
+    https://daemonize.readthedocs.io/en/latest/_modules/daemonize.html#Daemonize
+    '''
+    try:
+        LOG.info('Forking current process, and exiting the parent')
+        pid = os.fork()
+        if pid > 0:  # make the parent exist
+            sys.exit(0)
+    except OSError as err:
+        print('fork failed:', err, file=sys.stderr)
+        sys.exit(1)
+
+    # decouple from parent environment
+    LOG.info('decouple from parent environment')
+    os.chdir('/')
+    os.setsid()
+    os.umask(umask)
+
+    # redirect standard file descriptors
+    LOG.info('redirect standard file descriptors')
+    sys.stdout.flush()
+    sys.stderr.flush()
+    si = open(os.devnull, 'r')
+    so = open(os.devnull, 'a+')
+    se = open(os.devnull, 'a+')
+    
+    os.dup2(si.fileno(), sys.stdin.fileno())
+    os.dup2(so.fileno(), sys.stdout.fileno())
+    os.dup2(se.fileno(), sys.stderr.fileno())
 
 def main():
     mountpoint, rootdir, seckey, options, foreground = parse_options()
@@ -157,11 +180,9 @@ def main():
     LOG.debug('mount options: %s', options)
 
     # ....aaand cue music!
-    if foreground:
-        sys.exit(_main(mountpoint, rootdir, seckey, options))
-        
-    # daemonize
-    Crypt4GHDaemon(mountpoint, rootdir, seckey, options).start()
+    if not foreground:
+        detach() # daemonize
+    sys.exit(_main(mountpoint, rootdir, seckey, options))
 
 if __name__ == '__main__':
     main()
