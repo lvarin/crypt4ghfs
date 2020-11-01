@@ -6,7 +6,7 @@ crypt4ghfs is a fuse layer exposing Crypt4GH-encrypted files, as if they were de
 	
 The default configuration file is in `~/.c4gh/fs.conf`.
 
-See [fs.conf.sample](fs.conf.sample) for examples.
+See [the configuration sample](crypt4ghfs.conf.sample) for examples.
 
 
 * `seckey` must point to a [Crypt4GH private key](https://crypt4gh.readthedocs.io/en/latest/keys.html) or an ED25519 ssh key. This option is required.
