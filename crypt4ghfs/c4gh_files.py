@@ -15,7 +15,6 @@ class FileDecryptor():
     __slots__ = ('f',
                  '_fd',
                  'session_keys',
-                 'edit_list',
                  'hlen',
                  'start_ciphersegment',
                  'ciphersegment',
@@ -28,13 +27,14 @@ class FileDecryptor():
                            mode='rb',
                            buffering=0) # off
         # Parse header (yes, for each fd, small cost for caching segment)
-        self.session_keys, self.edit_list = crypt4gh_header.deconstruct(self.f, keys, sender_pubkey=None)
-        self.hlen = self.f.tell()
-        LOG.info('Payload position: %d', self.hlen)
+        self.session_keys, edit_list = crypt4gh_header.deconstruct(self.f, keys, sender_pubkey=None)
 
         # First version: we do not support edit lists
-        if self.edit_list:
+        if edit_list:
             raise ValueError('Edit list are not supported')
+
+        self.hlen = self.f.tell()
+        LOG.info('Payload position: %d', self.hlen)
 
         # Crypt4GH decryption buffer
         self.start_ciphersegment = None
