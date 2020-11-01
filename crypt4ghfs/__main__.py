@@ -145,7 +145,7 @@ def _main():
     # recipients might be empty if we don't create files
 
     # Default configurations
-    options = conf.getset('FUSE', 'options', fallback='default_permissions')
+    options = conf.getset('FUSE', 'options', fallback='ro,default_permissions')
     LOG.debug('mount options: %s', options)
 
     cache_directories = conf.getboolean('FUSE', 'cache_directories', fallback=True)

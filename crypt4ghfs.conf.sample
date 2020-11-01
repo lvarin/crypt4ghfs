@@ -15,7 +15,8 @@ extension = .c4gh
 # options to be passed to the fuse engine
 # Use 'ro' to make the file system as read-only
 # and prevent Crypt4GH encryptions
-options=allow_root,default_permissions
+options=ro,allow_root,default_permissions
+# the default options are 'ro,default_permissions'
 
 # We internally os.scandir. Pass the value True (the default)
 # to save the scans until the mtime is updated
