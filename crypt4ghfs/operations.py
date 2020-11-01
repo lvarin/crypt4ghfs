@@ -131,10 +131,11 @@ class Crypt4ghFS(pyfuse3.Operations, metaclass=NotPermittedMetaclass):
 
     def _stats2entry(self, s):
         entry = pyfuse3.EntryAttributes()
-        for attr in ('st_ino', 'st_mode', 'st_nlink', 'st_uid', 'st_gid',
+        for attr in ('st_ino', 'st_nlink', 'st_uid', 'st_gid',
                      'st_rdev', 'st_size', 'st_atime_ns', 'st_mtime_ns',
                      'st_ctime_ns'):
             setattr(entry, attr, getattr(s, attr))
+        entry.st_mode = s.st_mode & ~stat.S_IRWXO & ~stat.S_IRWXG # remove group and world access
         entry.generation = 0
         entry.entry_timeout = 0
         entry.attr_timeout = 0
