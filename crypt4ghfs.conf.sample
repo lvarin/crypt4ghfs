@@ -1,6 +1,11 @@
 [DEFAULT]
 # Python logging level: https://docs.python.org/3/library/logging.html#levels
+# Comment it out to remove the logging capability
 log_level = CRITICAL
+
+# When True, we also configure the crypt4gh logger
+# with the above level. Default: False
+include_crypt4gh_log = yes
 
 # Specify the root directory to mirror
 # Required

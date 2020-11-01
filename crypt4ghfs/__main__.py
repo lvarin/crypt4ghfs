@@ -118,8 +118,9 @@ def parse_options():
 
     # Logging
     log_level = conf.get('DEFAULT', 'log_level', fallback=None)
+    include_crypt4gh_log = conf.getboolean('DEFAULT', 'include_crypt4gh_log', fallback=False)
     if log_level is not None:
-        load_logger(log_level)
+        load_logger(log_level, include_crypt4gh=include_crypt4gh_log)
 
     return (mountpoint, conf)
 
