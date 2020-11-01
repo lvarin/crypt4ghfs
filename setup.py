@@ -19,6 +19,5 @@ setup(name='crypt4ghfs',
       install_requires=[
           'pyfuse3',
           'trio',
-          'PyYaml',
           'crypt4gh>=1.4',
       ])
