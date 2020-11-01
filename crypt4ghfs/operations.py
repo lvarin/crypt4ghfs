@@ -287,7 +287,7 @@ class Crypt4ghFS(pyfuse3.Operations, metaclass=NotPermittedMetaclass):
         # we are reading a file
         try:
             dec = FileDecryptor(path, flags, self.keys)
-            fd = dec.fd()
+            fd = dec.fd
             self._fd2cryptors[fd] = dec
             LOG.debug('added fd %d to map', fd)
         except OSError as exc:
@@ -319,7 +319,7 @@ class Crypt4ghFS(pyfuse3.Operations, metaclass=NotPermittedMetaclass):
         try:
             LOG.debug('internal creating %s', path)
             enc = FileEncryptor(path, mode, flags, self.recipients)
-            fd = enc.fd()
+            fd = enc.fd
             self._fd2cryptors[fd] = enc
             return fd
         except OSError as exc:

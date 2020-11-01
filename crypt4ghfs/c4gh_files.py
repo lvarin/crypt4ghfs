@@ -13,7 +13,7 @@ LOG = logging.getLogger(__name__)
 class FileDecryptor():
 
     __slots__ = ('f',
-                 '_fd',
+                 'fd',
                  'session_keys',
                  'hlen',
                  'start_ciphersegment',
@@ -22,8 +22,8 @@ class FileDecryptor():
 
     def __init__(self, path, flags, keys):
         # New fd everytime we open, cuz of the segment
-        self._fd = os.open(path,flags)
-        self.f = os.fdopen(self._fd,
+        self.fd = os.open(path,flags)
+        self.f = os.fdopen(self.fd,
                            mode='rb',
                            buffering=0) # off
         # Parse header (yes, for each fd, small cost for caching segment)
@@ -40,16 +40,13 @@ class FileDecryptor():
         self.start_ciphersegment = None
         self.ciphersegment = None
         self.segment = None
-
-    def fd(self):
-        return self._fd
     
     def __del__(self):
         LOG.debug('Deleting the FileDecryptor')
         self.close()
 
     def close(self):
-        return os.close(self._fd)
+        return os.close(self.fd)
 
     def read(self, offset, length):
         LOG.debug('Read offset: %s, length: %s', offset, length)
@@ -103,7 +100,7 @@ def flags2str(flags):
 
 class FileEncryptor():
 
-    __slots__ = ('_fd',
+    __slots__ = ('fd',
                  'already_encrypted',
                  'session_key',
                  'hlen',
@@ -121,7 +118,7 @@ class FileEncryptor():
 
         # Open the file
         LOG.info('Creating %s with flags (%d) %s [mode %o]',path, flags, flags2str(flags), mode)
-        self._fd = os.open(path, flags, mode=mode)
+        self.fd = os.open(path, flags, mode=mode)
 
         # Make the header
         encryption_method = 0 # only choice for this version
@@ -133,15 +130,12 @@ class FileEncryptor():
         hlen = len(header_bytes)
         LOG.debug('header length: %d', hlen)
         # Write it to disk
-        self.hlen = os.write(self._fd, header_bytes)
+        self.hlen = os.write(self.fd, header_bytes)
         assert hlen == self.hlen, "Could not write the whole header"
         self.old_offset = 0
         # Crypt4GH encryption buffer
         self.segment = bytearray(SEGMENT_SIZE)
         self.reset_segment()
-
-    def fd(self):
-        return self._fd
 
     def __del__(self):
         LOG.debug('Deleting the FileEncryptor')
@@ -165,8 +159,8 @@ class FileEncryptor():
             
         if self.already_encrypted:
             LOG.warning('Data already encrypted')
-            os.lseek(self._fd, offset)
-            return os.write(self._fd, buf)
+            os.lseek(self.fd, offset)
+            return os.write(self.fd, buf)
             
         if offset != self.old_offset:
             LOG.error('Non-contiguous writes are not supported')
@@ -194,13 +188,13 @@ class FileEncryptor():
             data = bytes(self.segment[:self.slen]) # slicing
         else:
             data = bytes(self.segment)
-        _encrypt_segment(data, lambda d: os.write(self._fd, d), self.session_key)
+        _encrypt_segment(data, lambda d: os.write(self.fd, d), self.session_key)
         self.reset_segment()
 
     def close(self):
         if not self.already_encrypted:
             self.flush() # in case we still have bytes in the buffer
-        return os.close(self._fd)
+        return os.close(self.fd)
 
     def push(self, data):
         data_len = len(data)
