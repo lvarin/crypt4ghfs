@@ -2,12 +2,18 @@
 
 crypt4ghfs is a fuse layer exposing Crypt4GH-encrypted files, as if they were decrypted
 
-	crypt4ghfs [-o options] <mountpoint>
+	crypt4ghfs [--conf conf_file] <mountpoint>
 	
-The default options are: `ro,allow_root,default_permissions,seckey=~/.c4gh/sec.key`
+The default configuration file is in `~/.c4gh/fs.conf`.
 
-`seckey` must point to a [Crypt4GH private key](https://crypt4gh.readthedocs.io/en/latest/keys.html) or an ED25519 ssh key. This option is required.
+See [the configuration sample](crypt4ghfs.conf.sample) for examples.
 
-`rootdir=<path>` must point to the root directory where the Crypt4GH-encrypted files reside. This option is required.
 
-Extra debug output is available if the options `debug_fuse` and/or `debug=LEVEL` are used (where `LEVEL` is a [Python logging levels](https://docs.python.org/3/library/logging.html#levels))
+* `seckey` must point to a [Crypt4GH private key](https://crypt4gh.readthedocs.io/en/latest/keys.html) or an ED25519 ssh key. This option is required.
+* `rootdir` must point to the root directory where the Crypt4GH-encrypted files reside. This option is required.
+
+Extra debug output is available if `log_level=LEVEL` is used (where `LEVEL` is a [Python logging levels](https://docs.python.org/3/library/logging.html#levels))
+
+In the case of an encrypting file system (ie not read-only mode), a list of recipients must be specified (potentially only including
+yourself).
+
