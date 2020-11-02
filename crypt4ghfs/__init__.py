@@ -6,7 +6,7 @@
 """The pipeline package contains code to start an *Ingestion pipeline*."""
 
 __title__ = 'Crypt4GH Filesystem'
-__version__ = '1.0'
+__version__ = '1.1'
 __author__ = 'Frédéric Haziza'
 __license__ = 'Apache 2.0'
 __copyright__ = 'Crypt4ghFS @ CRG, Barcelona'
