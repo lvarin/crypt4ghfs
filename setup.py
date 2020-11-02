@@ -30,16 +30,14 @@ setup(name='crypt4ghfs',
           'License :: OSI Approved :: Apache Software License',
 
           'Natural Language :: English',
-          'Operating System :: MacOS :: MacOS X',
           'Operating System :: POSIX',
-          'Operating System :: POSIX :: BSD',
           'Operating System :: POSIX :: Linux',
-          # 'Operating System :: Microsoft :: Windows,
 
           'Intended Audience :: Developers',
           'Intended Audience :: Healthcare Industry',
           'Intended Audience :: Information Technology',
           'Topic :: Security :: Cryptography',
+          'Topic :: System :: Filesystems',
           'Topic :: Scientific/Engineering :: Bio-Informatics',
 
           'Programming Language :: Python :: 3.6',
