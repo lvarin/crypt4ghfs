@@ -387,3 +387,13 @@ class Crypt4ghFS(pyfuse3.Operations, metaclass=NotPermittedMetaclass):
         # add the new path
         self._inode2path[inode] = path_new
         self._path2inode[path_new] = inode
+
+
+    async def unlink(self, inode_p, name, ctx):
+        LOG.info('unlink %s from %s', name, inode_p)
+        path = self.add_extension(os.path.join(self._inode_to_path(inode_p), fsdecode(name)))
+        try:
+            os.unlink(path)
+        except OSError as exc:
+            raise FUSEError(exc.errno)
+ 

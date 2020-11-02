@@ -99,6 +99,7 @@ def parse_options():
     parser = argparse.ArgumentParser(description='Crypt4GH filesystem')
     parser.add_argument('mountpoint', help='mountpoint for the Crypt4GH filesystem')
     parser.add_argument('--conf', help='configuration file', default='~/.c4gh/fs.conf')
+    parser.add_argument('-f', '--foreground', action='store_true', help='do not deamonize and keep in the foreground', default=False)
 
     args = parser.parse_args()
 
@@ -122,13 +123,14 @@ def parse_options():
     if log_level is not None:
         load_logger(log_level, include_crypt4gh=include_crypt4gh_log)
 
-    return (mountpoint, conf)
+    return (mountpoint, conf, args.foreground)
 
 
 def _main():
 
     # Parse the arguments
-    mountpoint, conf = parse_options()
+    mountpoint, conf, foreground = parse_options()
+
     LOG.info('Mountpoint: %s', mountpoint)
 
     # Required configurations
@@ -156,6 +158,10 @@ def _main():
     fs = Crypt4ghFS(rootdir, seckey, recipients, extension, cache_directories)
     pyfuse3.init(fs, mountpoint, options)
 
+    if not foreground:
+        LOG.info('Running current process in background')
+        detach() # daemonize
+
     try:
         LOG.debug('Entering main loop')
         trio.run(pyfuse3.main)
@@ -175,13 +181,45 @@ def _main():
     return 0
 
 
+def detach(umask=0):
+    '''PEP 3143
+    https://www.python.org/dev/peps/pep-3143/#correct-daemon-behaviour
+    https://daemonize.readthedocs.io/en/latest/_modules/daemonize.html#Daemonize
+    '''
+    try:
+        LOG.info('Forking current process, and exiting the parent')
+        pid = os.fork()
+        if pid > 0:  # make the parent exist
+            sys.exit(0)
+    except OSError as err:
+        print('fork failed:', err, file=sys.stderr)
+        sys.exit(1)
+
+    # decouple from parent environment
+    LOG.info('decouple from parent environment')
+    os.chdir('/')
+    os.setsid()
+    os.umask(umask)
+
+    # redirect standard file descriptors
+    LOG.info('redirect standard file descriptors')
+    sys.stdout.flush()
+    sys.stderr.flush()
+    si = open(os.devnull, 'r')
+    so = open(os.devnull, 'a+')
+    se = open(os.devnull, 'a+')
+    
+    os.dup2(si.fileno(), sys.stdin.fileno())
+    os.dup2(so.fileno(), sys.stdout.fileno())
+    os.dup2(se.fileno(), sys.stderr.fileno())
+
+
 def main():
-    sys.exit(_main())
-    # try:
-    #     sys.exit(_main())
-    # except Exception as e:
-    #     LOG.error('%s', e)
-    #     sys.exit(1)
+    try:
+        sys.exit(_main())
+    except Exception as e:
+        LOG.error('%s', e)
+        sys.exit(1)
 
 
 if __name__ == '__main__':
