@@ -90,7 +90,7 @@ def check_perms_ok(conf_file):
         print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@", file=sys.stderr)
         print("@        WARNING: UNPROTECTED CONFIGURATION FILE!         @", file=sys.stderr)
         print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@", file=sys.stderr)
-        print("Permissions {:3o} for '{}' are too open.".format(st.st_mode & 0o777, args.conf), file=sys.stderr)
+        print("Permissions {:3o} for '{}' are too open.".format(st.st_mode & 0o777, conf_file), file=sys.stderr)
         print("It is required that your private key files are NOT accessible by others.", file=sys.stderr)
         print("This private key will be ignored.", file=sys.stderr)
         raise ValueError(f'Bad permissions for {conf_file}')
