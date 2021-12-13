@@ -49,12 +49,14 @@ class Crypt4ghFS(pyfuse3.Operations, metaclass=NotPermittedMetaclass):
                  '_fd2cryptors',
                  '_inode2entries',
                  '_inode2mtime',
+                 '_inode2entry',
                  'rootdir',
                  'keys',
-                 'cache_directories',
+                 'cache',
                  'recipients')
 
-    def __init__(self, rootdir, seckey, recipients, extension, cache_directories):
+    def __init__(self, rootdir, seckey, recipients, extension, cache,
+                 entry_timeout = 300, attr_timeout = 300):
 
         self.rootdir = rootdir
         self.keys = [(0, seckey, None)]
@@ -66,12 +68,15 @@ class Crypt4ghFS(pyfuse3.Operations, metaclass=NotPermittedMetaclass):
         self._fd2cryptors = dict()
         self._inode2mtime = dict()
         self._inode2entries = dict()
+        self._inode2entry = dict()
 
         self.extension = extension or ''
         self.extension_len = len(self.extension)
         LOG.info('Extension: %s (%d)', self.extension, self.extension_len)
 
-        self.cache_directories = cache_directories
+        self.cache = cache
+        self.entry_timeout = entry_timeout or 300
+        self.attr_timeout = attr_timeout or 300
 
         super(pyfuse3.Operations, self).__init__()
 
@@ -105,11 +110,13 @@ class Crypt4ghFS(pyfuse3.Operations, metaclass=NotPermittedMetaclass):
         name = fsdecode(name)
         LOG.info('lookup for %s in %d', name, inode_p)
         path = os.path.join(self._inode_to_path(inode_p), name)
-        attrs = self._getattr(path)
-        self._inode2path[attrs.st_ino] = path
-        return attrs
+        return self._getattr(path)
         
     async def getattr(self, inode, ctx=None):
+        if self.cache:
+            e = self._inode2entry.get(inode)
+            if e:
+                return e
         LOG.info('getattr inode: %d', inode)
         path = self._inode_to_path(inode)
         return self._getattr(path)
@@ -123,12 +130,16 @@ class Crypt4ghFS(pyfuse3.Operations, metaclass=NotPermittedMetaclass):
                 raise FUSEError(errno.ENOENT)
             try:
                 path += self.extension
-                LOG.debug('_getattr (again): path=%s', path)
+                #LOG.debug('_getattr (again): path=%s', path)
                 s = os.lstat(path)
             except OSError as exc:
                 raise FUSEError(exc.errno)
-        return self._stats2entry(s)
-
+        e = self._stats2entry(s)
+        self._inode2path[s.st_ino] = path
+        if self.cache:
+            self._inode2entry[s.st_ino] = e
+        return e
+        
     def _stats2entry(self, s):
         entry = pyfuse3.EntryAttributes()
         for attr in ('st_ino', 'st_nlink', 'st_uid', 'st_gid',
@@ -137,8 +148,8 @@ class Crypt4ghFS(pyfuse3.Operations, metaclass=NotPermittedMetaclass):
             setattr(entry, attr, getattr(s, attr))
         entry.st_mode = s.st_mode & ~stat.S_IRWXO & ~stat.S_IRWXG # remove group and world access
         entry.generation = 0
-        entry.entry_timeout = 0
-        entry.attr_timeout = 0
+        entry.entry_timeout = self.entry_timeout
+        entry.attr_timeout = self.attr_timeout
         entry.st_blksize = 512
         entry.st_blocks = ((entry.st_size+entry.st_blksize-1) // entry.st_blksize)
         return entry
@@ -181,32 +192,18 @@ class Crypt4ghFS(pyfuse3.Operations, metaclass=NotPermittedMetaclass):
 
     async def _scandir(self, path):
         LOG.debug('Fetching entries for %s', path)
-        entries = []
         with os.scandir(path) as it: # read entirely. TODO: check if we can read it sorted.
             for entry in it:
-                ino = entry.inode()
-                s = entry.stat()
-                display_name = entry.name if stat.S_ISDIR(s.st_mode) else self.strip_extension(entry.name)
-                entry_path = os.path.join(path, display_name)
-                self._inode2path[ino] = entry_path
-                entries.append((ino, display_name, s))
-        return sorted(entries, key=lambda x: x[0])
+                e = self._stats2entry(entry.stat())
+                #display_name = entry.name if stat.S_ISDIR(s.st_mode) else self.strip_extension(entry.name)
+                display_name = self.strip_extension(entry.name) if entry.is_file() else entry.name
+                yield (e.st_ino, display_name, e)
 
     async def opendir(self, inode, ctx):
         path = self._inode_to_path(inode)
-        LOG.info('opening %s | Context (%d): %s', path, id(ctx), ctx)
-        if self.cache_directories:
-            mtime = self._inode2mtime.get(inode)
-            entry = self._getattr(path, no_extension=True)
-            # cache up to date
-            if mtime and mtime == entry.st_mtime_ns:
-                LOG.debug('cache uptodate, not modified since %s', mtime)
-                return inode
-
-        LOG.debug('Fetching entries for %s', path)
-        if self.cache_directories:
-            self._inode2mtime[inode] = entry.st_mtime_ns
-        self._inode2entries[inode] = await self._scandir(path)
+        LOG.info('opening %s', path)
+        entries = [e async for e in self._scandir(path)]
+        self._inode2entries[inode] = sorted(entries, key=lambda x: x[0])
         return inode
 
     async def readdir(self, inode, off, token):
@@ -214,26 +211,22 @@ class Crypt4ghFS(pyfuse3.Operations, metaclass=NotPermittedMetaclass):
             off = -1
 
         path = self._inode_to_path(inode)
-        LOG.info('readdir %s [inode %s]', path, inode)
-        LOG.debug('\toffset %s', off)
-        entries = self._inode2entries[inode]
-        LOG.info('read %d entries, starting at %d', len(entries), off)
-
-        # Sort them for the offset
-        for (ino, name, entry) in entries:
-            if ino <= off:
+        LOG.info('readdir %s [inode %s] | offset %s', path, inode, off)
+        for (ino, name, entry) in self._inode2entries[inode]:
+            if ino < off:
                 continue
-            attrs = self._stats2entry(entry)
-            pyfuse3.readdir_reply(token, fsencode(name), attrs, ino)
-            # ignore result?.... or if not: break?
-
-        return False # over
+            if pyfuse3.readdir_reply(token, fsencode(name), entry, ino+1):
+                if self.cache:
+                    self._inode2path[ino] = os.path.join(path, name)
+                    self._inode2entry[ino] = entry
+            else:
+                break
+        else:
+            return False # over
 
     async def releasedir(self, inode):
         LOG.info('release directory %s', inode)
-        if self.cache_directories:
-            self._inode2entries.pop(inode, None)
-            self._inode2mtime.pop(inode, None)
+        self._inode2entries.pop(inode, None)
 
     async def mkdir(self, inode_p, name, mode, ctx):
         LOG.info('mkdir in %d with name %s [mode: %o]', inode_p, name, mode)

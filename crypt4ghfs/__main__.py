@@ -151,11 +151,11 @@ def _main():
     options = conf.getset('FUSE', 'options', fallback='ro,default_permissions')
     LOG.debug('mount options: %s', options)
 
-    cache_directories = conf.getboolean('FUSE', 'cache_directories', fallback=True)
+    cache = conf.getboolean('FUSE', 'cache', fallback=True)
     extension = conf.get('DEFAULT', 'extension', fallback='.c4gh')
 
     # Build the file system
-    fs = Crypt4ghFS(rootdir, seckey, recipients, extension, cache_directories)
+    fs = Crypt4ghFS(rootdir, seckey, recipients, extension, cache)
     pyfuse3.init(fs, mountpoint, options)
 
     if not foreground:

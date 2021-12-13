@@ -23,6 +23,7 @@ class FileDecryptor():
     def __init__(self, path, flags, keys):
         # New fd everytime we open, cuz of the segment
         self.fd = os.open(path,flags)
+        LOG.info('Opening %s with flags (%o) %s',path, flags, ','.join(flags2str(flags)))
         self.f = os.fdopen(self.fd,
                            mode='rb',
                            buffering=0) # off
@@ -35,6 +36,7 @@ class FileDecryptor():
 
         self.hlen = self.f.tell()
         LOG.info('Payload position: %d', self.hlen)
+        LOG.info('Found %d session keys', len(self.session_keys))
 
         # Crypt4GH decryption buffer
         self.start_ciphersegment = None
@@ -54,16 +56,14 @@ class FileDecryptor():
         while length > 0:
             # Find which segment we are reaching into
             start_segment, off = divmod(offset, SEGMENT_SIZE)
-            start_ciphersegment = start_segment * CIPHER_SEGMENT_SIZE
+            start_ciphersegment = start_segment * CIPHER_SEGMENT_SIZE + self.hlen
             LOG.debug('Current position: %d | Fast-forwarding %d segments', start_ciphersegment, start_segment)
             if self.start_ciphersegment != start_ciphersegment:
                 LOG.debug('We do not have that segment cached')
                 self.start_ciphersegment = start_ciphersegment
-                pos = self.start_ciphersegment + self.hlen
                 # Move to its start
-                self.f.seek(pos, io.SEEK_SET)  # move forward
+                self.f.seek(start_ciphersegment, io.SEEK_SET)  # move forward
                 # Read it
-                LOG.debug('Reading ciphersegment at %d', pos)
                 self.ciphersegment = self.f.read(CIPHER_SEGMENT_SIZE)
                 ciphersegment_len = len(self.ciphersegment)
                 if ciphersegment_len == 0:
@@ -85,18 +85,18 @@ FLAGS=[s for s in dir(os) if s.startswith('O_')]
 
 def flags2str(flags):
     s = []
-    flags2 = flags & 0
+    acc = flags & 0
     for f in FLAGS:
         flag = getattr(os, f)
         if flags & flag == flag:
-            s.append(f)
-            flags2 |= flag
-    if flags2 != flags:
+            LOG.debug('flag: %s', f)
+            yield f
+            acc |= flag
+    if acc != flags:
         LOG.debug('  original flags: %s', bin(flags))
-        LOG.debug('recognized flags: %s', bin(flags2))
-        LOG.debug('            diff: %s', bin(flags & ~flags2))
-        s.append(' + unknown')
-    return ','.join(s)
+        LOG.debug('recognized flags: %s', bin(acc))
+        LOG.debug('            diff: %s', bin(flags & ~acc))
+        yield ' + unknown'
 
 class FileEncryptor():
 
@@ -117,7 +117,7 @@ class FileEncryptor():
             flags |= os.O_BINARY
 
         # Open the file
-        LOG.info('Creating %s with flags (%d) %s [mode %o]',path, flags, flags2str(flags), mode)
+        LOG.info('Creating %s with flags (%d) %s [mode %o]',path, flags, ','.join(flags2str(flags)), mode)
         self.fd = os.open(path, flags, mode=mode)
 
         # Make the header
