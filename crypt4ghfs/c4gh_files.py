@@ -20,10 +20,12 @@ class FileDecryptor():
                  'ciphersegment',
                  'segment')
 
-    def __init__(self, path, flags, keys):
+    def __init__(self, fd, flags, keys):
         # New fd everytime we open, cuz of the segment
-        self.fd = os.open(path,flags)
-        LOG.info('Opening %s with flags (%o) %s',path, flags, ','.join(flags2str(flags)))
+        path = f"/proc/self/fd/{fd}"
+        flags &= ~os.O_NOFOLLOW
+        self.fd = os.open(path, flags)
+        LOG.info('Opening %s with flags (%o)', path, flags)
         self.f = os.fdopen(self.fd,
                            mode='rb',
                            buffering=0) # off
@@ -62,7 +64,7 @@ class FileDecryptor():
                 LOG.debug('We do not have that segment cached')
                 self.start_ciphersegment = start_ciphersegment
                 # Move to its start
-                self.f.seek(start_ciphersegment, io.SEEK_SET)  # move forward
+                pos = self.f.seek(start_ciphersegment, io.SEEK_SET)  # move forward
                 # Read it
                 self.ciphersegment = self.f.read(CIPHER_SEGMENT_SIZE)
                 ciphersegment_len = len(self.ciphersegment)
@@ -80,23 +82,6 @@ class FileDecryptor():
             length -= datalen
             offset += datalen
 
-
-FLAGS=[s for s in dir(os) if s.startswith('O_')]
-
-def flags2str(flags):
-    s = []
-    acc = flags & 0
-    for f in FLAGS:
-        flag = getattr(os, f)
-        if flags & flag == flag:
-            LOG.debug('flag: %s', f)
-            yield f
-            acc |= flag
-    if acc != flags:
-        LOG.debug('  original flags: %s', bin(flags))
-        LOG.debug('recognized flags: %s', bin(acc))
-        LOG.debug('            diff: %s', bin(flags & ~acc))
-        yield ' + unknown'
 
 class FileEncryptor():
 
@@ -117,7 +102,7 @@ class FileEncryptor():
             flags |= os.O_BINARY
 
         # Open the file
-        LOG.info('Creating %s with flags (%d) %s [mode %o]',path, flags, ','.join(flags2str(flags)), mode)
+        LOG.info('Creating %s with flags (%d) [mode %o]',path, flags, mode)
         self.fd = os.open(path, flags, mode=mode)
 
         # Make the header
