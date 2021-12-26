@@ -13,7 +13,6 @@ LOG = logging.getLogger(__name__)
 class FileDecryptor():
 
     __slots__ = ('f',
-                 'fd',
                  'session_keys',
                  'hlen',
                  'start_ciphersegment',
@@ -22,10 +21,7 @@ class FileDecryptor():
 
     def __init__(self, fd, flags, keys):
         # New fd everytime we open, cuz of the segment
-        self.fd = fd
-        self.f = os.fdopen(self.fd,
-                           mode='rb',
-                           buffering=0) # off
+        self.f = os.fdopen(fd, mode='rb', closefd=True, buffering=0) # off
         # Parse header (yes, for each fd, small cost for caching segment)
         self.session_keys, edit_list = crypt4gh_header.deconstruct(self.f, keys, sender_pubkey=None)
 
@@ -43,13 +39,8 @@ class FileDecryptor():
         self.segment = None
     
     def __del__(self):
-        LOG.debug('Deleting the FileDecryptor')
-        self.close()
-
-    def close(self):
+        LOG.debug('Deleting the FileDecryptor | closing %d', self.f.fileno())
         self.f.close()
-        if self.fd > 0:
-            os.close(self.fd)
 
     def read(self, offset, length):
         LOG.debug('Read offset: %s, length: %s', offset, length)
