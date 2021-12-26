@@ -111,6 +111,7 @@ class Entry():
     def encoded_name(self):
         return os.fsencode(self.display_name)
 
-    def __del__(self):
-        if self.fd > 0:
-            os.close(self.fd)
+    # def __del__(self):
+    #     LOG.debug('Deleting %s', self)
+    #     if self.fd > 0:
+    #         os.close(self.fd)

@@ -9,7 +9,7 @@ include_crypt4gh_log = yes
 
 # Specify the root directory to mirror
 # Required
-rootdir=~/Desktop/EGA-crypt4gh-files
+rootdir=~/crypt4gh-files
 
 # Specify the extension to hide
 # Files endings corresponding to that extension will be stripped (once)
@@ -20,25 +20,22 @@ extension = .c4gh
 # options to be passed to the fuse engine
 # Use 'ro' to make the file system as read-only
 # and prevent Crypt4GH encryptions
-options=ro,allow_root,default_permissions
+options=ro,default_permissions
 # the default options are 'ro,default_permissions'
 
-# We internally os.scandir. Pass the value True (the default)
-# to save the scans until the mtime is updated
-# If you use False, directories are scanning everytime we open them
-# That might be useful in case listings are large and memory is getting thin.
-cache_directories = True
 
 [CRYPT4GH]
 # The encryption key
 seckey = ~/.ssh/mykey
 
-# |-separated list of recipient's public key paths
-# Only useful when the file system is not in read-only mode
-#recipient_keys = ~/.ssh/recipient.pub
-
-# When True, we will add the public key, derived from the above 
-# seckey to the list of recipients
-# That is useful in case we don't specify any recipients, 
-# but still want to read the files when just encrypted ourselves
-include_myself_as_recipient = yes
+# If you set `header_size_hint` to a non-negative integer, we'll
+# assume that all headers are of that size, and avoid a size lookup.
+# If it is set to 0 or missing, we'll use the `assume_same_size_headers`
+# to check if we perform only the first size lookup
+# and reuse the size for the other headers.
+#
+#header_size_hint = 124
+#
+# Defaults:
+#        header_size_hint: None
+#        assume_same_size_headers: True

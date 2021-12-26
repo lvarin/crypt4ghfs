@@ -1,6 +1,6 @@
 # Crypt4GH File System
 
-crypt4ghfs is a fuse layer exposing Crypt4GH-encrypted files, as if they were decrypted
+crypt4ghfs is a read-only fuse layer exposing Crypt4GH-encrypted files, as if they were decrypted
 
 	crypt4ghfs [-f|--foreground] [--conf conf_file] <mountpoint>
 	

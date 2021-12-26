@@ -22,10 +22,7 @@ class FileDecryptor():
 
     def __init__(self, fd, flags, keys):
         # New fd everytime we open, cuz of the segment
-        path = f"/proc/self/fd/{fd}"
-        flags &= ~os.O_NOFOLLOW
-        self.fd = os.open(path, flags)
-        LOG.info('Opening %s with flags (%o)', path, flags)
+        self.fd = fd
         self.f = os.fdopen(self.fd,
                            mode='rb',
                            buffering=0) # off
@@ -50,7 +47,9 @@ class FileDecryptor():
         self.close()
 
     def close(self):
-        return os.close(self.fd)
+        self.f.close()
+        if self.fd > 0:
+            os.close(self.fd)
 
     def read(self, offset, length):
         LOG.debug('Read offset: %s, length: %s', offset, length)
@@ -81,126 +80,3 @@ class FileDecryptor():
                 break
             length -= datalen
             offset += datalen
-
-
-class FileEncryptor():
-
-    __slots__ = ('fd',
-                 'already_encrypted',
-                 'session_key',
-                 'hlen',
-                 'slen',
-                 'left',
-                 'old_offset',
-                 'segment')
-
-    def __init__(self, path, mode, flags, recipients):
-
-        self.already_encrypted = None
-        # If Windows...
-        if os.name == 'nt':
-            flags |= os.O_BINARY
-
-        # Open the file
-        LOG.info('Creating %s with flags (%d) [mode %o]',path, flags, mode)
-        self.fd = os.open(path, flags, mode=mode)
-
-        # Make the header
-        encryption_method = 0 # only choice for this version
-        self.session_key = os.urandom(32) # we use one session key for all blocks
-        LOG.debug('Creating Crypt4GH header for %d recipients', len(recipients))
-        header_content = crypt4gh_header.make_packet_data_enc(encryption_method, self.session_key)
-        header_packets = crypt4gh_header.encrypt(header_content, recipients)
-        header_bytes = crypt4gh_header.serialize(header_packets)
-        hlen = len(header_bytes)
-        LOG.debug('header length: %d', hlen)
-        # Write it to disk
-        self.hlen = os.write(self.fd, header_bytes)
-        assert hlen == self.hlen, "Could not write the whole header"
-        self.old_offset = 0
-        # Crypt4GH encryption buffer
-        self.segment = bytearray(SEGMENT_SIZE)
-        self.reset_segment()
-
-    def __del__(self):
-        LOG.debug('Deleting the FileEncryptor')
-        self.close()
-        del self.segment
-
-
-    def write(self, offset, buf):
-
-        if not buf:
-            LOG.debug("Eh? no bytes? not doing anything...")
-            return 0
-
-        length = len(buf)
-        LOG.debug('Write offset: %s, length: %s', offset, length)
-
-        # check if already encrypted
-        # That's a weak solution, but should be fine in most cases
-        if self.already_encrypted is None and offset == 0 and length >= 8:
-            self.already_encrypted = (buf[:8] == crypt4gh_header.MAGIC_NUMBER)
-            
-        if self.already_encrypted:
-            LOG.warning('Data already encrypted')
-            os.lseek(self.fd, offset)
-            return os.write(self.fd, buf)
-            
-        if offset != self.old_offset:
-            LOG.error('Non-contiguous writes are not supported')
-            raise OSError(errno.EINVAL, 'Invalid offset: Non-contiguous writes are not supported')
-
-        while True:
-            buf = self.push(buf)
-            if not buf: # None or b''
-                break
-
-        # Update the offset
-        self.old_offset = offset + length
-        return length
-
-    def reset_segment(self):
-        self.slen = 0
-        self.left = SEGMENT_SIZE
-
-    def flush(self):
-        """Encrypt and write the current segment"""
-        LOG.debug("Flushing segment | buf pos %d | left %d", self.slen, self.left)
-        if self.slen == 0:
-            return
-        if self.slen < SEGMENT_SIZE:
-            data = bytes(self.segment[:self.slen]) # slicing
-        else:
-            data = bytes(self.segment)
-        _encrypt_segment(data, lambda d: os.write(self.fd, d), self.session_key)
-        self.reset_segment()
-
-    def close(self):
-        if not self.already_encrypted:
-            self.flush() # in case we still have bytes in the buffer
-        return os.close(self.fd)
-
-    def push(self, data):
-        data_len = len(data)
-        LOG.debug("Pushing %d bytes", data_len)
-        assert data_len > 0
-
-        # Adding enough bytes to the segment
-        written = min(data_len, self.left)
-        LOG.debug("Adding %d bytes to the segment", written)
-        assert self.slen+written <= SEGMENT_SIZE
-        self.segment[self.slen:self.slen+written] = data
-
-        # Discount them
-        self.left -= written
-        self.slen += written
-
-        # Should we flush it now?
-        if self.left == 0:
-            self.flush() # that resets the counters
-            return None # No more data to add
-
-        # Return the data that are left to write
-        return data[self.left:]
-

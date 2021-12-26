@@ -79,16 +79,6 @@ def retrieve_secret_key(conf):
 
     return get_private_key(seckeypath, cb)
 
-def build_recipients(conf, seckey):
-    recipient_paths = conf.getbarlist('CRYPT4GH', 'recipient_keys', fallback=[])
-    for pk in recipient_paths:
-        recipient_pubkey = os.path.expanduser(pk.strip())
-        if not os.path.exists(recipient_pubkey):
-            continue
-        LOG.debug("Recipient pubkey: %s", recipient_pubkey)
-        yield (0, seckey, get_public_key(recipient_pubkey))
-    if conf.getboolean('CRYPT4GH', 'include_myself_as_recipient'):
-        yield (0, seckey, bytes(PrivateKey(seckey).public_key))
 
 def check_perms_ok(conf_file):
     st = os.lstat(conf_file) # raise error if not found
@@ -151,8 +141,6 @@ def _main():
 
     # Encryption/Decryption keys
     seckey = retrieve_secret_key(conf)
-    recipients = list(set(build_recipients(conf, seckey))) # remove duplicates
-    # recipients might be empty if we don't create files
 
     # Default configurations
     options = conf.getset('FUSE', 'options', fallback='ro,default_permissions')
@@ -164,7 +152,8 @@ def _main():
     assume_same_size_headers = conf.getboolean('CRYPT4GH', 'assume_same_size_headers', fallback=True)
 
     # Build the file system
-    fs = Crypt4ghFS(rootdir, rootfd, seckey, recipients, extension, header_size_hint, assume_same_size_headers)
+    fs = Crypt4ghFS(rootdir, rootfd, seckey,
+                    extension, header_size_hint, assume_same_size_headers)
     pyfuse3.init(fs, mountpoint, options)
 
     if not foreground:
