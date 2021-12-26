@@ -7,7 +7,7 @@ from setuptools import setup, find_packages
 _readme = (Path(__file__).parent / "README.md").read_text()
 
 setup(name='crypt4ghfs',
-      version='1.1',
+      version='1.2',
       url='https://github.com/EGA-archive/crypt4ghfs',
       license='Apache License 2.0',
       author='Frédéric Haziza',
@@ -52,6 +52,6 @@ setup(name='crypt4ghfs',
       install_requires=[
           'pyfuse3',
           'trio',
-          'crypt4gh>=1.4',
+          'crypt4gh>=1.5',
       ],
 )
