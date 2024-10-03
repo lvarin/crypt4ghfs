@@ -96,6 +96,7 @@ def parse_options():
     parser.add_argument('mountpoint', help='mountpoint for the Crypt4GH filesystem')
     parser.add_argument('--conf', help='configuration file', default='~/.c4gh/fs.conf')
     parser.add_argument('-f', '--foreground', action='store_true', help='do not deamonize and keep in the foreground', default=False)
+    parser.add_argument('-o', '--options', help='Options passed down to fuse', default='ro,default_permissions')
 
     args = parser.parse_args()
 
@@ -119,13 +120,15 @@ def parse_options():
     if log_level is not None:
         load_logger(log_level, include_crypt4gh=include_crypt4gh_log)
 
-    return (mountpoint, conf, args.foreground)
+    options = set(args.options.split(','))
+
+    return (mountpoint, conf, args.foreground, options)
 
 
 def _main():
 
     # Parse the arguments
-    mountpoint, conf, foreground = parse_options()
+    mountpoint, conf, foreground, options = parse_options()
 
     LOG.info('Mountpoint: %s', mountpoint)
 
@@ -143,7 +146,7 @@ def _main():
     seckey = retrieve_secret_key(conf)
 
     # Default configurations
-    options = conf.getset('FUSE', 'options', fallback='ro,default_permissions')
+    options = conf.getset('FUSE', 'options', fallback=options)
     LOG.debug('mount options: %s', options)
 
     extension = conf.get('DEFAULT', 'extension', fallback='.c4gh')
@@ -154,6 +157,8 @@ def _main():
     # Build the file system
     fs = Crypt4ghFS(rootdir, rootfd, seckey,
                     extension, header_size_hint, assume_same_size_headers)
+
+    LOG.info('Options: %s', options)
     pyfuse3.init(fs, mountpoint, options)
 
     if not foreground:
